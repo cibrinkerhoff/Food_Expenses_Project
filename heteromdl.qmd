@@ -1,0 +1,39 @@
+---
+title: "Heteroskedastic Model"
+author: "Matthew and Corbin"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| warnings: false
+
+library(tidyverse)
+library(gamlss)
+
+```
+
+```{r}
+
+food <- vroom::vroom("FoodExpenses.txt")
+
+```
+
+```{r}
+
+# make heteroskedastic mdl using gamlss
+het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food)
+```
+
+# checking assumptions
+
+```{r}
+
+car::avPlots(lm(EatingOut ~ Income, data = food))
+
+```
+
+```{r}
+
+std_resids <- residuals(het_food, what = "z-scores")
+```
