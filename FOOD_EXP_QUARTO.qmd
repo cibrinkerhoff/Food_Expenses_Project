@@ -287,3 +287,52 @@ Our advanced model builds on the familiar framework of simple linear regression 
 To account for this, our model keeps the same form for predicting the average Eating Out level at a given income, expressed as $\text{Average Eating Out}_i = 19.19 + 0.443*\text{Income}_i$
 
 but it enhances the model by allowing the variance of Eating Out spending to change with income rather than remain fixed. Specifically, we model the variance as $\log(\text{Variance}) = 1.038 + 0.014*\text{Income}_i$ which means the variability is mathematically tied to income and can increase or decrease depending on the estimated relationship. By explicitly modeling how uncertainty grows with income, this approach produces more accurate confidence intervals and more reliable hypothesis tests, ultimately leading to conclusions that better reflect the true behavior in the population.
+
+#### Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
+
+```{r}
+
+car::avPlots(lm(EatingOut ~ Income, data = food))
+
+```
+
+```{r}
+
+std_resids <- residuals(het_food, what = "z-scores")
+```
+
+```{r}
+hist(std_resids, freq = F, xlim = c(-4,4))
+par(new = T)
+curve(dnorm(x), xlim = c(-4,4))
+
+ks.test(std_resids,"pnorm", mean = 0, sd = 1)
+```
+
+```{r}
+
+lm_df <- tibble(
+  fitted = fitted(het_food),
+  resids = std_resids
+)
+
+bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
+bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
+
+ggplot(data = lm_df, aes(x = fitted, y = resids))+
+  geom_point(alpha = 1, size = 1)+
+  ylim(-3,3)+
+  geom_hline(yintercept = 0, color = 'red')+
+  annotate(
+      "text",
+      x = 50, y = 3,
+      label = bp_str,
+      size = 4,
+      color = "blue"
+    )
+
+```
+
+```{r}
+r_2 <- cor(food$EatingOut, fitted(het_food))^2
+```
