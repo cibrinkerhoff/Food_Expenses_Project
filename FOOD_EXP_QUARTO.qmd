@@ -65,11 +65,13 @@ r_2 <- cor(food$EatingOut, fitted(het_food))^2
 r_2
 ```
 
+## Introduction
+
+The National Restaurant Association hired me to investigate how household income influences consumer spending on food away from home, a key component in understanding future restaurant demand. Using data from the Food Demand Survey (FooDS), which includes annual household income and weekly expenditures on eating out, this project examines whether restaurant food behaves as a “normal good” that is, whether spending increases as income rises. Beyond assessing this basic relationship, the analysis also considers how variability in spending among higher‑income households and shifting preferences for convenience or food quality may shape broader market trends. The goal is to provide financial advisers with clear, regression‑based insights that can inform projections of restaurant demand and guide strategic planning for business growth in an evolving economic landscape.
+
 ## Main Conclusions - Questions
 
 Describe the primary conclusions about the relationship between income and food expenditures. What relationships did you find?
-
-The National Restaurant Association hired me to investigate how household income influences consumer spending on food away from home, a key component in understanding future restaurant demand. Using data from the Food Demand Survey (FooDS), which includes annual household income and weekly expenditures on eating out, this project examines whether restaurant food behaves as a “normal good” that is, whether spending increases as income rises. Beyond assessing this basic relationship, the analysis also considers how variability in spending among higher‑income households and shifting preferences for convenience or food quality may shape broader market trends. The goal is to provide financial advisers with clear, regression‑based insights that can inform projections of restaurant demand and guide strategic planning for business growth in an evolving economic landscape.
 
 The advisers specifically hypothesize that a “healthy” restaurant economy should see increases of about \$0.50 or more per week for each \$1000 increase in income. Based on the data you have, do you think this is a healthy economy?
 
@@ -117,6 +119,8 @@ if (p_val < 0.05) {
 
 ```
 
+Based on the advisers’ benchmark, the data do not provide evidence that this is a “healthy” restaurant economy. The heteroskedastic linear model estimates that weekly eating‑out spending increases by \$0.443 for every additional \$1,000 of annual income which is below the advisers’ threshold of \$0.50. The estimate is also quite precise, with a standard error of 0.014 and a 95% confidence interval of \[0.416, 0.470\], which lies entirely below the hypothesized healthy level. Furthermore, the one‑sided hypothesis test comparing the observed slope to the target of \$0.50 yields a z‑value of –4.077 and a p‑value of 1.000, indicating no statistical support that the true increase meets or exceeds the \$0.50 benchmark. Taken together, the point estimate, confidence interval, and hypothesis test all suggest that, based on this dataset, the economy does not satisfy the advisers’ definition of a healthy level of growth in restaurant spending.
+
 Advisers are expecting incomes to generally shift upward in time (income generally increases by 3-4% each year). Make sure you provide some predictions on what an upward shift in income over the next 5 years or so could do to food expenditures (including the variance not just the amount spent on EatingOut).
 
 ```{r}
@@ -156,8 +160,107 @@ print(quantile(eating_5, c(.025,.975)))
 
 ## Modeling Details
 
-Justify your hiring by showing that standard regression models won’t work for this situation so they needed to hire you and should hire you again.
+```{r}
+#LINE ASSUMPTIONS
+plot(food$Income, food$EatingOut, xlab = 'Income', ylab = 'Food Expenses', main = 'Food Expenses vs Income')
+#line assumptions met
+
+#create resids
+model <- lm(EatingOut ~ Income, data = food)
+resids <- resid(model)
+
+#plot resids
+plot(food$Income, resids, xlab = 'Income', ylab = 'Residuals', main = 'Residuals vs Income')
+#problems with heteroskedasticity
+
+#check normality of resids
+qqnorm(resids)
+qqline(resids)
+hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
+#normality is met
+```
+
+A standard linear regression model is not adequate for this analysis, and this is precisely why my expertise was needed. When we examined the residuals from a traditional least‑squares regression of EatingOut on Income, the plot clearly showed a strong pattern of heteroskedasticity, the spread of residuals increases substantially as income rises. In other words, higher‑income households exhibit far more variability in their restaurant spending, violating the constant‑variance assumption required for ordinary regression to produce reliable estimates, standard errors, and hypothesis tests. Ignoring this issue would lead to biased inference and misleading conclusions about how strongly income affects restaurant spending. To overcome this, we fitted a heteroskedastic linear model using GAMLSS, which explicitly models both the mean and the variance as functions of income. This approach captures the true structure of the data and produces trustworthy estimates for policy and forecasting. The need for a model that handles non‑constant variance demonstrates why a more advanced analysis was required, and it is why bringing in a consultant with the appropriate statistical toolkit was essential.
 
 Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers Food Expenditures Consulting Problem Background n = 523 don’t know linear algebra so try to avoid that if possible.
 
 Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
+
+```{r}
+
+fit_ols <- lm(EatingOut ~ Income, data = food)
+fit_g   <- gamlss(EatingOut ~ Income, sigma.formula = ~ Income, data = food, trace = FALSE)
+
+aic_ols <- AIC(fit_ols); bic_ols <- BIC(fit_ols)
+aic_g   <- AIC(fit_g);   bic_g   <- GAIC(fit_g, k = log(n))  # BIC for GAMLSS
+
+data.frame(model = c("OLS","GAMLSS_het"),
+           AIC = c(aic_ols, aic_g),
+           BIC = c(bic_ols, bic_g))
+
+
+
+set.seed(121)
+
+# -----------------------------
+# Load data
+# -----------------------------
+# Expects:
+#   Income    = annual household income in thousands
+#   EatingOut = weekly $ spent eating out
+food <- read.table("FoodExpenses.txt", header = TRUE)
+
+# -----------------------------
+# Helper: Negative Log-Likelihood (Normal)
+# -----------------------------
+nll_norm <- function(y, mu, sd) {
+  sd[sd <= 1e-8] <- 1e-8  # guard against zero/negative sd
+  -sum(dnorm(y, mean = mu, sd = sd, log = TRUE))
+}
+
+# -----------------------------
+# K-fold CV
+# -----------------------------
+K <- 10
+n <- nrow(food)
+fold_id <- sample(rep(1:K, length.out = n))
+
+cv_scores <- data.frame(
+  model = character(),
+  fold  = integer(),
+  NLL   = numeric(),
+  stringsAsFactors = FALSE
+)
+
+for (k in 1:K) {
+  train <- food[fold_id != k, ]
+  test  <- food[fold_id == k, ]
+  
+  # ---- OLS (mean only; assume constant sigma) ----
+  m_lm <- lm(EatingOut ~ Income, data = train)
+  mu_lm <- predict(m_lm, newdata = test)
+  sd_lm <- rep(summary(m_lm)$sigma, nrow(test))  # constant σ from training fit
+  nll_lm <- nll_norm(test$EatingOut, mu_lm, sd_lm)
+  cv_scores <- rbind(cv_scores, data.frame(model = "OLS", fold = k, NLL = nll_lm))
+  
+  # ---- GAMLSS (heteroskedastic Normal: mean ~ Income, sigma ~ Income) ----
+  m_g <- gamlss(
+    EatingOut ~ Income,
+    sigma.formula = ~ Income,
+    data = train,
+    trace = FALSE
+  )
+  mu_g <- predict(m_g, newdata = test, what = "mu", type = "response")
+  sd_g <- predict(m_g, newdata = test, what = "sigma", type = "response")
+  nll_g <- nll_norm(test$EatingOut, mu_g, sd_g)
+  cv_scores <- rbind(cv_scores, data.frame(model = "GAMLSS_het", fold = k, NLL = nll_g))
+}
+
+# -----------------------------
+# Summarize across folds
+# -----------------------------
+mean_nll <- aggregate(NLL ~ model, data = cv_scores, FUN = mean)
+print(mean_nll)
+```
+
+The heteroskedastic linear model is clearly the more trustworthy choice for this analysis because it provides a substantially better fit to the data than a standard OLS regression. Both AIC and BIC, which evaluate model quality by balancing goodness‑of‑fit against model complexity, strongly favor the heteroskedastic linear model: its AIC (3515.09) and BIC (3532.13) are dramatically lower than the OLS model’s AIC (3647.48) and BIC (3660.26). Differences of this magnitude indicate overwhelming evidence that the heteroskedastic specification captures the underlying data structure far more effectively. This conclusion is reinforced by the cross‑validated negative log‑likelihood, which measures how well each model predicts the full distribution of eating‑out spending. The heteroskedastic linear model achieves a lower NLL (175.77) compared to OLS (182.48), meaning it produces more accurate probabilistic predictions and better accounts for the fact that variability in spending increases with income. Beyond improving predictive likelihood, the heteroskedastic model also yields more accurate confidence and prediction intervals than OLS, because it correctly models the changing variance rather than assuming constant noise. While the two models may produce similar mean predictions or RMSE, only the heteroskedastic specification delivers intervals that properly widen with income, making it a more reliable foundation for inference and decision‑making.
