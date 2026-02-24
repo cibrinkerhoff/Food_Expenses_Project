@@ -124,12 +124,9 @@ Based on the advisers’ benchmark, the data do not provide evidence that this i
 Advisers are expecting incomes to generally shift upward in time (income generally increases by 3-4% each year). Make sure you provide some predictions on what an upward shift in income over the next 5 years or so could do to food expenditures (including the variance not just the amount spent on EatingOut).
 
 ```{r}
-#im not sure this is right. I'm thinking of a perfecnt increase as increase by one.035 but Im not so sure about it. It doesnt seem to connect perfectlty to a 1 unit increase. I think it depends on how many units we have to start
-
-# 3-4% by year is essentiall 1.035 * B or B*.035 increase
-
-compound <- 1.035^5
-
+inflation <- 0.035
+yrs <- 5
+compound <- (1+inflation)^yrs
 
 # assumes `compound` is a numeric scalar
 income_5 <- food$Income * compound
@@ -140,23 +137,41 @@ newdata <- data.frame(Income = income_5)
 # Predict
 eating_5 <- predict(het_food, newdata = newdata)
 
-print(summary(eating_5))
-print(quantile(eating_5, c(.025,.975)))
-
-
-# beta_inc <- coef(het_food, what = "mu")["Income"]
-# 
-# theta_inc <- coef(het_food, what = "sigma")["Income"]
-# 
-# eat_increase <- .035 * beta_inc
-# eat_sd <- .035 * theta_inc
-# 
-# print("Yearly increase")
-# print(eat_increase)
-# 
-# print("sd increase")
-# print(eat_sd)
 ```
+
+```{r}
+print("Means")
+print("Original Vals")
+print(quantile(food$EatingOut, c(.025,.5,.975)))
+print("After 5 years")
+print(quantile(eating_5, c(.025,.5,.975)))
+
+```
+
+```{r}
+
+b_sigma <- coef(het_food, what = "sigma")  # c("(Intercept)"=..., "Budget"=...)
+
+sigma_og <- exp(b_sigma["(Intercept)"] + b_sigma["Income"] * food$Income)
+
+# sigma = exp(gamma0 + gamma1 * Budget)   (log link)
+eta_sigma <- b_sigma["(Intercept)"] + b_sigma["Income"] * income_5
+sigma_5 <- exp(eta_sigma)
+
+```
+
+```{r}
+
+print("Variance")
+print("Original Vals")
+print(quantile(sigma_og, c(.025,.5,.975)))
+print("After 5 years")
+print(quantile(sigma_5, c(.025,.5,.975)))
+
+
+```
+
+As incomes are expected to rise by roughly 3–4% annually over the next five years, our model predicts a corresponding increase in both the average level of Eating Out expenditures and the uncertainty surrounding those expenditures. These predictions are considering what Expeditures will look like at the 5 year mark. Specifically, we estimate that the average amount spent eating out will increase from approximately 46.53 to 50.76. In addition, the model indicates that the range within which 95% of Eating Out expenditures are expected to fall will shift to between 34.98 and 82.33 at the new income levels. Variability in spending also increases as incomes rise: the average variance in Eating Out expenditures is projected to grow from 6.38 to 7.43, and the 95% range of variances across incomes is expected to widen to between 4.58 and 19.56. Together, these results suggest not only higher spending on average but also a broader spread in eating‑out behavior as household incomes gradually increase
 
 ## Modeling Details
 
@@ -264,3 +279,11 @@ print(mean_nll)
 ```
 
 The heteroskedastic linear model is clearly the more trustworthy choice for this analysis because it provides a substantially better fit to the data than a standard OLS regression. Both AIC and BIC, which evaluate model quality by balancing goodness‑of‑fit against model complexity, strongly favor the heteroskedastic linear model: its AIC (3515.09) and BIC (3532.13) are dramatically lower than the OLS model’s AIC (3647.48) and BIC (3660.26). Differences of this magnitude indicate overwhelming evidence that the heteroskedastic specification captures the underlying data structure far more effectively. This conclusion is reinforced by the cross‑validated negative log‑likelihood, which measures how well each model predicts the full distribution of eating‑out spending. The heteroskedastic linear model achieves a lower NLL (175.77) compared to OLS (182.48), meaning it produces more accurate probabilistic predictions and better accounts for the fact that variability in spending increases with income. Beyond improving predictive likelihood, the heteroskedastic model also yields more accurate confidence and prediction intervals than OLS, because it correctly models the changing variance rather than assuming constant noise. While the two models may produce similar mean predictions or RMSE, only the heteroskedastic specification delivers intervals that properly widen with income, making it a more reliable foundation for inference and decision‑making.
+
+#### Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers donʼt know linear algebra so try to avoid that if possible.
+
+Our advanced model builds on the familiar framework of simple linear regression but improves it by allowing the variability of Eating Out behavior to change with income. In a traditional regression model, we assume that the spread of the data around the prediction—known as the variance—is constant for all income levels. However, in our data we observed that higher‑income individuals show much more variability in how much they spend eating out.
+
+To account for this, our model keeps the same form for predicting the average Eating Out level at a given income, expressed as $\text{Average Eating Out}_i = 19.19 + 0.443*\text{Income}_i$
+
+but it enhances the model by allowing the variance of Eating Out spending to change with income rather than remain fixed. Specifically, we model the variance as $\log(\text{Variance}) = 1.038 + 0.014*\text{Income}_i$ which means the variability is mathematically tied to income and can increase or decrease depending on the estimated relationship. By explicitly modeling how uncertainty grows with income, this approach produces more accurate confidence intervals and more reliable hypothesis tests, ultimately leading to conclusions that better reflect the true behavior in the population.

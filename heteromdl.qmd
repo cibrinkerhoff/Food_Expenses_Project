@@ -76,30 +76,60 @@ r_2 <- cor(food$EatingOut, fitted(het_food))^2
 
 #### Advisers are expecting incomes to generally shift upward in time (income generally increases by 3-4% each year). Make sure you provide some predictions on what an upward shift in income over the next 5 years or so could do to food expenditures (including the variance not just the amount spent on EatingOut)
 
-
 ```{r}
-#im not sure this is right. I'm thinking of a perfecnt increase as increase by one.035 but Im not so sure about it. It doesnt seem to connect perfectlty to a 1 unit increase. I think it depends on how many units we have to start
+inflation <- 0.035
+yrs <- 5
+compound <- (1+inflation)^yrs
 
-# 3-4% by year is essentiall 1.035 * B or B*.035 increase
-beta_inc <- coef(het_food, what = "mu")["Income"]
+# assumes `compound` is a numeric scalar
+income_5 <- food$Income * compound
 
-theta_inc <- coef(het_food, what = "sigma")["Income"]
+# Make newdata with the predictor named exactly as in your formula (e.g., Income)
+newdata <- data.frame(Income = income_5)
 
-eat_increase <- .035 * beta_inc
-eat_sd <- .035 * theta_inc
-
-print("Yearly increase")
-print(eat_increase)
-
-print("sd increase")
-print(eat_sd)
+# Predict
+eating_5 <- predict(het_food, newdata = newdata)
 
 ```
 
-#### Describe this new “advanced” model you are using in mathematical detail and how you used it
-to arrive at the conclusions you came to in the following section. In doing so, these advisers
-donʼt know linear algebra so try to avoid that if possible.
+```{r}
+print("Means")
+print("Original Vals")
+print(quantile(food$EatingOut, c(.025,.5,.975)))
+print("After 5 years")
+print(quantile(eating_5, c(.025,.5,.975)))
 
-Our advanced model uses a very similar technique to the traditional linear regression model to calculate a prediction for the expected Eating Out level at a certain income. The difference comes in allowing a change in the expected variance in Eating Out levels when income changes. Traditionally, it is expected that the amounts that predictions vary from the true value to be constant regardless of different Income amounts. In this model, we recognize that the amount that eating out habits varies increases as income increases. This allows us to better calculate confidence intervals and hypothesis tests.
+```
 
-I CAN ASSUME THEY UNDERSTAND LOG(SIGMA_2). I NEED TO PROVIDE EACH COEFFICIENT
+```{r}
+
+b_sigma <- coef(het_food, what = "sigma")  # c("(Intercept)"=..., "Budget"=...)
+
+sigma_og <- exp(b_sigma["(Intercept)"] + b_sigma["Income"] * food$Income)
+
+# sigma = exp(gamma0 + gamma1 * Budget)   (log link)
+eta_sigma <- b_sigma["(Intercept)"] + b_sigma["Income"] * income_5
+sigma_5 <- exp(eta_sigma)
+
+```
+
+```{r}
+
+print("Variance")
+print("Original Vals")
+print(quantile(sigma_og, c(.025,.5,.975)))
+print("After 5 years")
+print(quantile(sigma_5, c(.025,.5,.975)))
+
+
+```
+
+As incomes are expected to rise by roughly 3–4% annually over the next five years, our model predicts a corresponding increase in both the average level of Eating Out expenditures and the uncertainty surrounding those expenditures. These predictions are considering what Expeditures will look like at the 5 year mark. Specifically, we estimate that the average amount spent eating out will increase from approximately 46.53 to 50.76. In addition, the model indicates that the range within which 95% of Eating Out expenditures are expected to fall will shift to between 34.98 and 82.33 at the new income levels. Variability in spending also increases as incomes rise: the average variance in Eating Out expenditures is projected to grow from 6.38 to 7.43, and the 95% range of variances across incomes is expected to widen to between 4.58 and 19.56. Together, these results suggest not only higher spending on average but also a broader spread in eating‑out behavior as household incomes gradually increase
+
+#### Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers donʼt know linear algebra so try to avoid that if possible.
+
+Our advanced model builds on the familiar framework of simple linear regression but improves it by allowing the variability of Eating Out behavior to change with income. In a traditional regression model, we assume that the spread of the data around the prediction—known as the variance—is constant for all income levels. However, in our data we observed that higher‑income individuals show much more variability in how much they spend eating out.
+
+To account for this, our model keeps the same form for predicting the average Eating Out level at a given income, expressed as $\text{Average Eating Out}_i = 19.19 + 0.443*\text{Income}_i$
+
+but it enhances the model by allowing the variance of Eating Out spending to change with income rather than remain fixed. Specifically, we model the variance as $\log(\text{Variance}) = 1.038 + 0.014*\text{Income}_i$ which means the variability is mathematically tied to income and can increase or decrease depending on the estimated relationship. By explicitly modeling how uncertainty grows with income, this approach produces more accurate confidence intervals and more reliable hypothesis tests, ultimately leading to conclusions that better reflect the true behavior in the population.
