@@ -123,18 +123,35 @@ Advisers are expecting incomes to generally shift upward in time (income general
 #im not sure this is right. I'm thinking of a perfecnt increase as increase by one.035 but Im not so sure about it. It doesnt seem to connect perfectlty to a 1 unit increase. I think it depends on how many units we have to start
 
 # 3-4% by year is essentiall 1.035 * B or B*.035 increase
-beta_inc <- coef(het_food, what = "mu")["Income"]
 
-theta_inc <- coef(het_food, what = "sigma")["Income"]
+compound <- 1.035^5
 
-eat_increase <- .035 * beta_inc
-eat_sd <- .035 * theta_inc
 
-print("Yearly increase")
-print(eat_increase)
+# assumes `compound` is a numeric scalar
+income_5 <- food$Income * compound
 
-print("sd increase")
-print(eat_sd)
+# Make newdata with the predictor named exactly as in your formula (e.g., Income)
+newdata <- data.frame(Income = income_5)
+
+# Predict
+eating_5 <- predict(het_food, newdata = newdata)
+
+print(summary(eating_5))
+print(quantile(eating_5, c(.025,.975)))
+
+
+# beta_inc <- coef(het_food, what = "mu")["Income"]
+# 
+# theta_inc <- coef(het_food, what = "sigma")["Income"]
+# 
+# eat_increase <- .035 * beta_inc
+# eat_sd <- .035 * theta_inc
+# 
+# print("Yearly increase")
+# print(eat_increase)
+# 
+# print("sd increase")
+# print(eat_sd)
 ```
 
 ## Modeling Details
