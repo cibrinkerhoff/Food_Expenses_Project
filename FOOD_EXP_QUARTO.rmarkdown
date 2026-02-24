@@ -1,0 +1,167 @@
+---
+title: "Food_Expenses_Quarto"
+format: html
+editor: visual
+---
+
+## Setup
+
+```{r}
+
+library(tidyverse)
+library(gamlss)
+food <- vroom::vroom("FoodExpenses.txt")
+
+# make heteroskedastic mdl using gamlss
+het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food)
+```
+
+## Check Assumptions
+
+```{r}
+car::avPlots(lm(EatingOut ~ Income, data = food))
+```
+
+```{r}
+
+std_resids <- residuals(het_food, what = "z-scores")
+```
+
+```{r}
+hist(std_resids, freq = F, xlim = c(-4,4))
+par(new = T)
+curve(dnorm(x), xlim = c(-4,4))
+
+ks.test(std_resids,"pnorm", mean = 0, sd = 1)
+```
+
+```{r}
+
+lm_df <- tibble(
+  fitted = fitted(het_food),
+  resids = std_resids
+)
+
+bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
+bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
+
+ggplot(data = lm_df, aes(x = fitted, y = resids))+
+  geom_point(alpha = 1, size = 1)+
+  ylim(-3,3)+
+  geom_hline(yintercept = 0, color = 'red')+
+  annotate(
+      "text",
+      x = 50, y = 3,
+      label = bp_str,
+      size = 4,
+      color = "blue"
+    )
+
+```
+
+```{r}
+r_2 <- cor(food$EatingOut, fitted(het_food))^2
+
+r_2
+```
+
+## Main Conclusions - Questions
+
+Describe the primary conclusions about the relationship between income and food expenditures. What relationships did you find?
+
+The National Restaurant Association hired me to investigate how household income influences consumer spending on food away from home, a key component in understanding future restaurant demand. Using data from the Food Demand Survey (FooDS), which includes annual household income and weekly expenditures on eating out, this project examines whether restaurant food behaves as a “normal good” that is, whether spending increases as income rises. Beyond assessing this basic relationship, the analysis also considers how variability in spending among higher‑income households and shifting preferences for convenience or food quality may shape broader market trends. The goal is to provide financial advisers with clear, regression‑based insights that can inform projections of restaurant demand and guide strategic planning for business growth in an evolving economic landscape.
+
+The advisers specifically hypothesize that a “healthy” restaurant economy should see increases of about \$0.50 or more per week for each \$1000 increase in income. Based on the data you have, do you think this is a healthy economy?
+
+```{r}
+
+
+# --- GAMLSS model ---
+# Mean:   mu = beta0 + beta1 * Income
+# Sigma:  log(sigma) = theta0 + theta1 * Income  (default link for sigma is log)
+fit <- gamlss(
+  formula       = EatingOut ~ Income,
+  sigma.formula = ~ Income,    # allow heteroskedasticity with income
+  data          = food
+)
+
+# --- Extract slope (beta1) and its SE from the mean equation ---
+b1    <- unname(coef(fit, what = "mu")["Income"])
+V_mu  <- vcov(fit, what = "mu")
+se_b1 <- sqrt(diag(V_mu))["Income"]
+
+# --- One-sided Wald test: H0: beta1 = 0.50  vs  H1: beta1 > 0.50 ---
+b_star <- 0.50
+z_val  <- (b1 - b_star) / se_b1
+p_val  <- pnorm(z_val, lower.tail = FALSE)  # upper-tail p-value for beta1 > 0.50
+
+
+# --- 95% CI for beta1 (two-sided) ---
+z_975 <- qnorm(0.975)
+ci95  <- c(b1 - z_975 * se_b1, b1 + z_975 * se_b1)
+
+# --- Report ---
+cat("\n--- Healthy Economy Test (GAMLSS) ---\n")
+cat(sprintf("Estimated slope (beta1): %.3f $/week per $1,000 income\n", b1))
+cat(sprintf("Standard error:          %.3f\n", se_b1))
+cat(sprintf("95%% CI for beta1:        [%.3f, %.3f]\n", ci95[1], ci95[2]))
+cat("One-sided test: H0: beta1 = 0.50  vs  H1: beta1 > 0.50\n")
+cat(sprintf("z = %.3f, p = %.4f\n", z_val, p_val))
+
+if (p_val < 0.05) {
+  cat("Conclusion: Evidence that the increase EXCEEDS $0.50 → Healthy economy.\n")
+} else {
+  cat("Conclusion: Not enough evidence that the increase exceeds $0.50.\n")
+}
+
+
+```
+
+Advisers are expecting incomes to generally shift upward in time (income generally increases by 3-4% each year). Make sure you provide some predictions on what an upward shift in income over the next 5 years or so could do to food expenditures (including the variance not just the amount spent on EatingOut).
+
+```{r}
+#im not sure this is right. I'm thinking of a perfecnt increase as increase by one.035 but Im not so sure about it. It doesnt seem to connect perfectlty to a 1 unit increase. I think it depends on how many units we have to start
+
+# 3-4% by year is essentiall 1.035 * B or B*.035 increase
+beta_inc <- coef(het_food, what = "mu")["Income"]
+
+theta_inc <- coef(het_food, what = "sigma")["Income"]
+
+eat_increase <- .035 * beta_inc
+eat_sd <- .035 * theta_inc
+
+print("Yearly increase")
+print(eat_increase)
+
+print("sd increase")
+print(eat_sd)
+```
+
+## Modeling Details
+
+Justify your hiring by showing that standard regression models won’t work for this situation so they needed to hire you and should hire you again.
+
+```{r}
+#LINE ASSUMPTIONS
+plot(food$Income, food$EatingOut, xlab = 'Income', ylab = 'Food Expenses', main = 'Food Expenses vs Income')
+#line assumptions met
+
+#create resids
+model <- lm(EatingOut ~ Income, data = food)
+resids <- resid(model)
+
+#plot resids
+plot(food$Income, resids, xlab = 'Income', ylab = 'Residuals', main = 'Residuals vs Income')
+#problems with heteroskedasticity
+
+#check normality of resids
+qqnorm(resids)
+qqline(resids)
+hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
+#normality is met
+```
+
+Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers Food Expenditures Consulting Problem Background n = 523 don’t know linear algebra so try to avoid that if possible.
+
+Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
+

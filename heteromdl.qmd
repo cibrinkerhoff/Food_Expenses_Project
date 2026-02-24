@@ -75,9 +75,8 @@ r_2 <- cor(food$EatingOut, fitted(het_food))^2
 ```
 
 #### Advisers are expecting incomes to generally shift upward in time (income generally increases
-by 3-4% each year). Make sure you provide some predictions on what an upward shift in
-income over the next 5 years or so could do to food expenditures (including the variance not
-just the amount spent on EatingOut)
+
+by 3-4% each year). Make sure you provide some predictions on what an upward shift in income over the next 5 years or so could do to food expenditures (including the variance not just the amount spent on EatingOut)
 
 ```{r}
 #im not sure this is right. I'm thinking of a perfecnt increase as increase by one.035 but Im not so sure about it. It doesnt seem to connect perfectlty to a 1 unit increase. I think it depends on how many units we have to start
