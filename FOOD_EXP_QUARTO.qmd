@@ -262,80 +262,79 @@ Justify (i.e validate) that this model is a trustworthy model for the answers yo
 add coverage
 
 ```{r}
-n<-nrow(food)
-fit_ols <- lm(EatingOut ~ Income, data = food)
-fit_g   <- gamlss(EatingOut ~ Income, sigma.formula = ~ Income, data = food, trace = FALSE)
-
-aic_ols <- AIC(fit_ols); bic_ols <- BIC(fit_ols)
-aic_g   <- AIC(fit_g);   bic_g   <- GAIC(fit_g, k = log(n))  # BIC for GAMLSS
-
-data.frame(model = c("OLS","GAMLSS_het"),
-           AIC = c(aic_ols, aic_g),
-           BIC = c(bic_ols, bic_g))
-
-
-
+## --- Setup & Data ---
 set.seed(121)
 
-# -----------------------------
 # Load data
-# -----------------------------
 # Expects:
 #   Income    = annual household income in thousands
 #   EatingOut = weekly $ spent eating out
 food <- read.table("FoodExpenses.txt", header = TRUE)
-
-# -----------------------------
-# Helper: Negative Log-Likelihood (Normal)
-# -----------------------------
-nll_norm <- function(y, mu, sd) {
-  sd[sd <= 1e-8] <- 1e-8  # guard against zero/negative sd
-  -sum(dnorm(y, mean = mu, sd = sd, log = TRUE))
-}
-
-# -----------------------------
-# K-fold CV
-# -----------------------------
-K <- 10
 n <- nrow(food)
-fold_id <- sample(rep(1:K, length.out = n))
 
-cv_scores <- data.frame(
-  model = character(),
-  fold  = integer(),
-  NLL   = numeric(),
-  stringsAsFactors = FALSE
+## --- Fit Models ---
+fit_ols <- lm(EatingOut ~ Income, data = food)
+
+fit_g <- gamlss(
+  EatingOut ~ Income,
+  sigma.formula = ~ Income,   # heteroskedasticity: sigma depends on Income
+  data = food,
+  trace = FALSE
 )
 
-for (k in 1:K) {
-  train <- food[fold_id != k, ]
-  test  <- food[fold_id == k, ]
-  
-  # ---- OLS (mean only; assume constant sigma) ----
-  m_lm <- lm(EatingOut ~ Income, data = train)
-  mu_lm <- predict(m_lm, newdata = test)
-  sd_lm <- rep(summary(m_lm)$sigma, nrow(test))  # constant σ from training fit
-  nll_lm <- nll_norm(test$EatingOut, mu_lm, sd_lm)
-  cv_scores <- rbind(cv_scores, data.frame(model = "OLS", fold = k, NLL = nll_lm))
-  
-  # ---- GAMLSS (heteroskedastic Normal: mean ~ Income, sigma ~ Income) ----
-  m_g <- gamlss(
-    EatingOut ~ Income,
-    sigma.formula = ~ Income,
-    data = train,
-    trace = FALSE
-  )
-  mu_g <- predict(m_g, newdata = test, what = "mu", type = "response")
-  sd_g <- predict(m_g, newdata = test, what = "sigma", type = "response")
-  nll_g <- nll_norm(test$EatingOut, mu_g, sd_g)
-  cv_scores <- rbind(cv_scores, data.frame(model = "GAMLSS_het", fold = k, NLL = nll_g))
+## --- Information Criteria ---
+aic_ols <- AIC(fit_ols)
+bic_ols <- BIC(fit_ols)
+
+aic_g <- AIC(fit_g)
+bic_g <- GAIC(fit_g, k = log(n))  # BIC penalty uses log(n)
+
+ic_tbl <- data.frame(
+  model = c("OLS", "GAMLSS_het"),
+  AIC   = c(aic_ols, aic_g),
+  BIC   = c(bic_ols, bic_g)
+)
+print(ic_tbl)
+
+## --- Coverage Intervals (80%, 90%, 95%) ---
+# Fitted means
+mu_ols <- predict(fit_ols)
+mu_g   <- predict(fit_g, what = "mu", type = "response")
+
+# Standard deviations
+sd_ols <- rep(summary(fit_ols)$sigma, n)  # constant sigma for OLS
+sd_g   <- predict(fit_g, what = "sigma", type = "response")  # sigma(Income) for GAMLSS
+
+# Coverage helper
+coverage <- function(y, mu, sd, level) {
+  z <- qnorm((1 + level) / 2)
+  lower <- mu - z * sd
+  upper <- mu + z * sd
+  mean(y >= lower & y <= upper)
 }
 
-# -----------------------------
-# Summarize across folds
-# -----------------------------
-mean_nll <- aggregate(NLL ~ model, data = cv_scores, FUN = mean)
-print(mean_nll)
+levels <- c(0.80, 0.90, 0.95)
+
+cov_ols <- sapply(levels, function(L) coverage(food$EatingOut, mu_ols, sd_ols, L))
+cov_g   <- sapply(levels, function(L) coverage(food$EatingOut, mu_g,   sd_g,   L))
+
+coverage_tbl <- data.frame(
+  Level = levels,
+  OLS_Coverage = as.numeric(cov_ols),
+  GAMLSS_Coverage = as.numeric(cov_g)
+)
+print(coverage_tbl)
+
+## --- Optional: Quick Plot of GAMLSS Mean and 95% Interval ---
+# (Uncomment to visualize; assumes Income is reasonably ordered or you sort for lines)
+ ord <- order(food$Income)
+ plot(food$Income, food$EatingOut,
+      pch = 16, col = "gray50",
+      xlab = "Income", ylab = "Eating Out ($/week)",
+      main = "GAMLSS: Mean and 95% Interval")
+ lines(food$Income[ord], mu_g[ord], col = "blue", lwd = 2)
+ lines(food$Income[ord], (mu_g + 1.96*sd_g)[ord], col = "blue", lty = 2)
+ lines(food$Income[ord], (mu_g - 1.96*sd_g)[ord], col = "blue", lty = 2)
 ```
 
-The heteroskedastic linear model is clearly the more trustworthy choice for this analysis because it provides a substantially better fit to the data than a standard OLS regression. Both AIC and BIC, which evaluate model quality by balancing goodness‑of‑fit against model complexity, strongly favor the heteroskedastic linear model: its AIC (3515.09) and BIC (3532.13) are dramatically lower than the OLS model’s AIC (3647.48) and BIC (3660.26). Differences of this magnitude indicate overwhelming evidence that the heteroskedastic specification captures the underlying data structure far more effectively. This conclusion is reinforced by the cross‑validated negative log‑likelihood, which measures how well each model predicts the full distribution of eating‑out spending. The heteroskedastic linear model achieves a lower NLL (175.77) compared to OLS (182.48), meaning it produces more accurate probabilistic predictions and better accounts for the fact that variability in spending increases with income. Beyond improving predictive likelihood, the heteroskedastic model also yields more accurate confidence and prediction intervals than OLS, because it correctly models the changing variance rather than assuming constant noise. While the two models may produce similar mean predictions or RMSE, only the heteroskedastic specification delivers intervals that properly widen with income, making it a more reliable foundation for inference and decision‑making.
+The heteroskedastic linear model is a trustworthy model for this analysis because it provides both a substantially better statistical fit and more accurate uncertainty quantification than the standard OLS model. In terms of model fit, the heteroskedastic model achieves a much lower AIC (3515.09 vs. 3647.48) and BIC (3532.13 vs. 3660.26), demonstrating that it explains the data more effectively even after penalizing for model complexity. The coverage interval results also show that the heteroskedastic model produces well‑calibrated predictive intervals across all nominal levels. For example, at the 95% level, the heteroskedastic model achieves a coverage of 0.9446, almost exactly matching the intended 95% rate and slightly outperforming the OLS model (0.9426). At the 90% level, both models perform similarly, and at the 80% level, OLS slightly over‑covers (0.8413), while the heteroskedastic model stays closer to the target width (0.8126), reflecting more realistic uncertainty estimates. This improvement occurs because the heteroskedastic model allows the variability in EatingOut to change with Income rather than incorrectly assuming constant variance as OLS does. Taken together, the substantially better AIC/BIC values and the more accurate and better‑calibrated interval coverage provide strong evidence that the heteroskedastic linear model is reliable and appropriate for supporting the conclusions drawn in the previous section.
