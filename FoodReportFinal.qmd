@@ -24,7 +24,7 @@ The National Restaurant Association hired me to investigate how household income
 
 ## Main Conclusions
 
-We found that there is a linear relationship between Income and Food Expenditures. This is great for being able to build a model for this data. We also found that the data is heteroscedastic, in this case as income increases, the variance of food expenditures also increases.
+Our analysis shows a clear positive relationship between income and food expenditures: as household income increases, average spending on eating out rises as well. However, this relationship is not only linear but also heteroskedastic—higher‑income households exhibit substantially greater variability in their eating‑out behavior. Using a heteroskedastic linear model (GAMLSS), we estimated that weekly restaurant spending increases by about $0.443 for every additional $1,000 of annual income. This estimate is precise, with a standard error of 0.014 and a 95% confidence interval of [0.416, 0.470], and it lies entirely below the advisers’ benchmark of $0.50. A formal one‑sided hypothesis test confirms that the true increase does not reach the proposed healthy‑economy threshold. Altogether, the data reveal that while income reliably predicts higher food expenditures, it also brings greater uncertainty in spending patterns, and the rate of increase is insufficient to classify the restaurant economy as “healthy” by the given standards.
 
 ### Is the market healthy?
 
@@ -125,10 +125,16 @@ As incomes are expected to rise by roughly 3–4% annually over the next five ye
 
 
 ```{r}
+
 #| echo: false
 
+# set 2x2 layout, keep margins modest
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
 #LINE ASSUMPTIONS
-plot(food$Income, food$EatingOut, xlab = 'Income', ylab = 'Food Expenses', main = 'Food Expenses vs Income')
+plot(food$Income, food$EatingOut,
+     xlab = 'Income', ylab = 'Food Expenses',
+     main = 'Food Expenses vs Income')
 #line assumptions met
 
 #create resids
@@ -136,14 +142,21 @@ model <- lm(EatingOut ~ Income, data = food)
 resids <- resid(model)
 
 #plot resids
-plot(food$Income, resids, xlab = 'Income', ylab = 'Residuals', main = 'Residuals vs Income')
+plot(food$Income, resids,
+     xlab = 'Income', ylab = 'Residuals',
+     main = 'Residuals vs Income')
 #problems with heteroskedasticity
 
 #check normality of resids
 qqnorm(resids)
 qqline(resids)
+
 hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
 #normality is met
+
+# restore original graphics settings
+par(op)
+
 ```
 
 A standard linear regression model is not adequate for this analysis, and this is precisely why my expertise was needed. When we examined the residuals from a traditional least‑squares regression of EatingOut on Income, the plot clearly showed a strong pattern of heteroskedasticity, the spread of residuals increases substantially as income rises. In other words, higher‑income households exhibit far more variability in their restaurant spending, violating the constant‑variance assumption required for ordinary regression to produce reliable estimates, standard errors, and hypothesis tests. Ignoring this issue would lead to biased inference and misleading conclusions about how strongly income affects restaurant spending. To overcome this, we fitted a heteroskedastic linear model using GAMLSS, which explicitly models both the mean and the variance as functions of income. This approach captures the true structure of the data and produces trustworthy estimates for policy and forecasting. The need for a model that handles non‑constant variance demonstrates why a more advanced analysis was required, and it is why bringing in a consultant with the appropriate statistical toolkit was essential.
@@ -294,3 +307,10 @@ print(coverage_tbl)
 ```
 
 The heteroskedastic linear model is a trustworthy model for this analysis because it provides both a substantially better statistical fit and more accurate uncertainty quantification than the standard OLS model. In terms of model fit, the heteroskedastic model achieves a much lower AIC (3515.09 vs. 3647.48) and BIC (3532.13 vs. 3660.26), demonstrating that it explains the data more effectively even after penalizing for model complexity. The coverage interval results also show that the heteroskedastic model produces well‑calibrated predictive intervals across all nominal levels. For example, at the 95% level, the heteroskedastic model achieves a coverage of 0.9446, almost exactly matching the intended 95% rate and slightly outperforming the OLS model (0.9426). At the 90% level, both models perform similarly, and at the 80% level, OLS slightly over‑covers (0.8413), while the heteroskedastic model stays closer to the target width (0.8126), reflecting more realistic uncertainty estimates. This improvement occurs because the heteroskedastic model allows the variability in EatingOut to change with Income rather than incorrectly assuming constant variance as OLS does. Taken together, the substantially better AIC/BIC values and the more accurate and better‑calibrated interval coverage provide strong evidence that the heteroskedastic linear model is reliable and appropriate for supporting the conclusions drawn in the previous section.
+
+
+## Code Appendix
+```{r}
+#| eval: FALSE
+
+```
