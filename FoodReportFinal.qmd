@@ -23,7 +23,7 @@ The National Restaurant Association hired me to investigate how household income
 
 ## Main Conclusions
 
-We found that there is a linear relationship between Income and Food Expenditures. This is great for being able to build a model for this data. We also found that the data is heteroscedastic, in this case as income increases, the variance of food expenditures also increases.
+Our analysis shows a clear positive relationship between income and food expenditures: as household income increases, average spending on eating out rises as well. However, this relationship is not only linear but also heteroskedastic—higher‑income households exhibit substantially greater variability in their eating‑out behavior. Using a heteroskedastic linear model (GAMLSS), we estimated that weekly restaurant spending increases by about $0.443 for every additional $1,000 of annual income. This estimate is precise, with a standard error of 0.014 and a 95% confidence interval of [0.416, 0.470], and it lies entirely below the advisers’ benchmark of $0.50. A formal one‑sided hypothesis test confirms that the true increase does not reach the proposed healthy‑economy threshold. Altogether, the data reveal that while income reliably predicts higher food expenditures, it also brings greater uncertainty in spending patterns, and the rate of increase is insufficient to classify the restaurant economy as “healthy” by the given standards.
 
 ### Is the market healthy?
 
