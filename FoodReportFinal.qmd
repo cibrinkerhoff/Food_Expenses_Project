@@ -311,4 +311,240 @@ The heteroskedastic linear model is a trustworthy model for this analysis becaus
 ```{r}
 #| eval: FALSE
 
+
+library(tidyverse)
+library(gamlss)
+library(patchwork)
+
+food <- vroom::vroom("FoodExpenses.txt")
+
+het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food, trace = FALSE)
+
+
+
+# --- GAMLSS model ---
+# Mean:   mu = beta0 + beta1 * Income
+# Sigma:  log(sigma) = theta0 + theta1 * Income  (default link for sigma is log)
+fit <- gamlss(
+  formula       = EatingOut ~ Income,
+  sigma.formula = ~ Income,    # allow heteroskedasticity with income
+  data          = food,
+  trace = FALSE
+)
+
+# --- Extract slope (beta1) and its SE from the mean equation ---
+b1    <- unname(coef(fit, what = "mu")["Income"])
+V_mu  <- vcov(fit, what = "mu")
+se_b1 <- sqrt(diag(V_mu))["Income"]
+
+# --- One-sided Wald test: H0: beta1 = 0.50  vs  H1: beta1 > 0.50 ---
+b_star <- 0.50
+z_val  <- (b1 - b_star) / se_b1
+p_val  <- pnorm(z_val, lower.tail = FALSE)  # upper-tail p-value for beta1 > 0.50
+
+
+# --- 95% CI for beta1 (two-sided) ---
+z_975 <- qnorm(0.975)
+ci95  <- c(b1 - z_975 * se_b1, b1 + z_975 * se_b1)
+
+# --- Report ---
+cat("\n--- Healthy Economy Test (GAMLSS) ---\n")
+cat(sprintf("Estimated slope (beta1): %.3f $/week per $1,000 income\n", b1))
+cat(sprintf("Standard error:          %.3f\n", se_b1))
+cat(sprintf("95%% CI for beta1:        [%.3f, %.3f]\n", ci95[1], ci95[2]))
+cat("One-sided test: H0: beta1 = 0.50  vs  H1: beta1 > 0.50\n")
+cat(sprintf("z = %.3f, p = %.4f\n", z_val, p_val))
+
+if (p_val < 0.05) {
+  cat("Conclusion: Evidence that the increase EXCEEDS $0.50 → Healthy economy.\n")
+} else {
+  cat("Conclusion: Not enough evidence that the increase exceeds $0.50.\n")
+}
+
+inflation <- 0.035
+yrs <- 5
+compound <- (1+inflation)^yrs
+
+# assumes `compound` is a numeric scalar
+income_5 <- food$Income * compound
+
+# Make newdata with the predictor named exactly as in your formula (e.g., Income)
+newdata <- data.frame(Income = income_5)
+
+# Predict
+eating_5 <- predict(het_food, newdata = newdata)
+
+# print("Means")
+# print("Original Vals")
+# print(quantile(food$EatingOut, c(.025,.5,.975)))
+# print("After 5 years")
+# print(quantile(eating_5, c(.025,.5,.975)))
+
+
+b_sigma <- coef(het_food, what = "sigma")  # c("(Intercept)"=..., "Budget"=...)
+
+sigma_og <- exp(b_sigma["(Intercept)"] + b_sigma["Income"] * food$Income)
+
+# sigma = exp(gamma0 + gamma1 * Budget)   (log link)
+eta_sigma <- b_sigma["(Intercept)"] + b_sigma["Income"] * income_5
+sigma_5 <- exp(eta_sigma)
+
+
+# print("Variance")
+# print("Original Vals")
+# print(quantile(sigma_og, c(.025,.5,.975)))
+# print("After 5 years")
+# print(quantile(sigma_5, c(.025,.5,.975)))
+
+
+# set 2x2 layout, keep margins modest
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
+#LINE ASSUMPTIONS
+plot(food$Income, food$EatingOut,
+     xlab = 'Income', ylab = 'Food Expenses',
+     main = 'Food Expenses vs Income')
+#line assumptions met
+
+#create resids
+model <- lm(EatingOut ~ Income, data = food)
+resids <- resid(model)
+
+#plot resids
+plot(food$Income, resids,
+     xlab = 'Income', ylab = 'Residuals',
+     main = 'Residuals vs Income')
+#problems with heteroskedasticity
+
+#check normality of resids
+qqnorm(resids)
+qqline(resids)
+
+hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
+#normality is met
+
+# restore original graphics settings
+par(op)
+
+
+car::avPlots(lm(EatingOut ~ Income, data = food))
+
+std_resids <- residuals(het_food, what = "z-scores")
+# 
+# hist(std_resids, freq = F, xlim = c(-4,4))
+# par(new = T)
+# curve(dnorm(x), xlim = c(-4,4))
+
+
+# assuming std_resids already exists as your z-score residuals
+df <- data.frame(std_resids = std_resids)
+
+resids_hist <- ggplot(df, aes(x = std_resids)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "grey80", color = "grey30") +
+  stat_function(fun = dnorm, color = "blue", linewidth = 1) +
+  coord_cartesian(xlim = c(-4, 4)) +
+  labs(
+    title = "Histogram of Stand. Residual and a Residuals v Fitted Plot",
+    x = "Standardized residuals (z-scores)",
+    y = "Density"
+  ) +
+  theme_minimal()
+
+
+ks_results <- ks.test(std_resids,"pnorm", mean = 0, sd = 1)
+
+
+lm_df <- tibble(
+  fitted = fitted(het_food),
+  resids = std_resids
+)
+
+bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
+bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
+
+resids_fitted <- ggplot(data = lm_df, aes(x = fitted, y = resids))+
+  geom_point(alpha = 1, size = 1)+
+  ylim(-3,3)+
+  geom_hline(yintercept = 0, color = 'red')
+
+
+r_2 <- cor(food$EatingOut, fitted(het_food))^2
+
+resids_hist + resids_fitted
+
+
+## --- Setup & Data ---
+set.seed(121)
+
+# Load data
+# Expects:
+#   Income    = annual household income in thousands
+#   EatingOut = weekly $ spent eating out
+food <- read.table("FoodExpenses.txt", header = TRUE)
+n <- nrow(food)
+
+## --- Fit Models ---
+fit_ols <- lm(EatingOut ~ Income, data = food)
+
+fit_g <- gamlss(
+  EatingOut ~ Income,
+  sigma.formula = ~ Income,   # heteroskedasticity: sigma depends on Income
+  data = food,
+  trace = FALSE
+)
+
+## --- Information Criteria ---
+aic_ols <- AIC(fit_ols)
+bic_ols <- BIC(fit_ols)
+
+aic_g <- AIC(fit_g)
+bic_g <- GAIC(fit_g, k = log(n))  # BIC penalty uses log(n)
+
+ic_tbl <- data.frame(
+  model = c("OLS", "GAMLSS_het"),
+  AIC   = c(aic_ols, aic_g),
+  BIC   = c(bic_ols, bic_g)
+)
+print(ic_tbl)
+
+## --- Coverage Intervals (80%, 90%, 95%) ---
+# Fitted means
+mu_ols <- predict(fit_ols)
+mu_g   <- predict(fit_g, what = "mu", type = "response")
+
+# Standard deviations
+sd_ols <- rep(summary(fit_ols)$sigma, n)  # constant sigma for OLS
+sd_g   <- predict(fit_g, what = "sigma", type = "response")  # sigma(Income) for GAMLSS
+
+# Coverage helper
+coverage <- function(y, mu, sd, level) {
+  z <- qnorm((1 + level) / 2)
+  lower <- mu - z * sd
+  upper <- mu + z * sd
+  mean(y >= lower & y <= upper)
+}
+
+levels <- c(0.80, 0.90, 0.95)
+
+cov_ols <- sapply(levels, function(L) coverage(food$EatingOut, mu_ols, sd_ols, L))
+cov_g   <- sapply(levels, function(L) coverage(food$EatingOut, mu_g,   sd_g,   L))
+
+coverage_tbl <- data.frame(
+  Level = levels,
+  OLS_Coverage = as.numeric(cov_ols),
+  GAMLSS_Coverage = as.numeric(cov_g)
+)
+#print(coverage_tbl)
+
+## --- Optional: Quick Plot of GAMLSS Mean and 95% Interval ---
+# (Uncomment to visualize; assumes Income is reasonably ordered or you sort for lines)
+ ord <- order(food$Income)
+ plot(food$Income, food$EatingOut,
+      pch = 16, col = "gray50",
+      xlab = "Income", ylab = "Eating Out ($/week)",
+      main = "GAMLSS: Mean and 95% Interval")
+ lines(food$Income[ord], mu_g[ord], col = "blue", lwd = 2)
+ lines(food$Income[ord], (mu_g + 1.96*sd_g)[ord], col = "blue", lty = 2)
+ lines(food$Income[ord], (mu_g - 1.96*sd_g)[ord], col = "blue", lty = 2)
 ```
