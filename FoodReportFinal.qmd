@@ -261,7 +261,7 @@ ic_tbl <- data.frame(
   AIC   = c(aic_ols, aic_g),
   BIC   = c(bic_ols, bic_g)
 )
-print(ic_tbl)
+#print(ic_tbl)
 
 ## --- Coverage Intervals (80%, 90%, 95%) ---
 # Fitted means
