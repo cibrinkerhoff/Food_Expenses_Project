@@ -125,7 +125,6 @@ As incomes are expected to rise by roughly 3–4% annually over the next five ye
 
 
 ```{r}
-
 #| echo: false
 
 # set 2x2 layout, keep margins modest
@@ -177,7 +176,7 @@ but it enhances the model by allowing the variance of Eating Out spending to cha
 #| echo: false
 #| warning: false
 
-avplt <- car::avPlots(lm(EatingOut ~ Income, data = food))
+car::avPlots(lm(EatingOut ~ Income, data = food))
 
 std_resids <- residuals(het_food, what = "z-scores")
 # 
@@ -221,7 +220,6 @@ resids_fitted <- ggplot(data = lm_df, aes(x = fitted, y = resids))+
 
 r_2 <- cor(food$EatingOut, fitted(het_food))^2
 
-avplt
 resids_hist + resids_fitted
   
 ```
@@ -292,7 +290,7 @@ coverage_tbl <- data.frame(
   OLS_Coverage = as.numeric(cov_ols),
   GAMLSS_Coverage = as.numeric(cov_g)
 )
-print(coverage_tbl)
+#print(coverage_tbl)
 
 ## --- Optional: Quick Plot of GAMLSS Mean and 95% Interval ---
 # (Uncomment to visualize; assumes Income is reasonably ordered or you sort for lines)
