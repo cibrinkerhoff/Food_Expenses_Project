@@ -5,7 +5,6 @@ format: pdf
 editor: visual
 ---
 
-1 + 1
 
 ```{r}
 #| echo: false
@@ -15,7 +14,7 @@ library(gamlss)
 
 food <- vroom::vroom("FoodExpenses.txt")
 
-het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food)
+het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food, trace = FALSE)
 ```
 
 ## Introduction
@@ -38,7 +37,8 @@ We found that there is a linear relationship between Income and Food Expenditure
 fit <- gamlss(
   formula       = EatingOut ~ Income,
   sigma.formula = ~ Income,    # allow heteroskedasticity with income
-  data          = food
+  data          = food,
+  trace = FALSE
 )
 
 # --- Extract slope (beta1) and its SE from the mean equation ---
@@ -157,26 +157,21 @@ but it enhances the model by allowing the variance of Eating Out spending to cha
 
 #### Validating our model
 
+#### Checking Model Assumptions
+
 ```{r}
+#| echo: false
 
 car::avPlots(lm(EatingOut ~ Income, data = food))
 
-```
-
-```{r}
-
 std_resids <- residuals(het_food, what = "z-scores")
-```
 
-```{r}
 hist(std_resids, freq = F, xlim = c(-4,4))
 par(new = T)
 curve(dnorm(x), xlim = c(-4,4))
 
 ks.test(std_resids,"pnorm", mean = 0, sd = 1)
-```
 
-```{r}
 
 lm_df <- tibble(
   fitted = fitted(het_food),
@@ -201,3 +196,85 @@ ggplot(data = lm_df, aes(x = fitted, y = resids))+
 
 r_2 <- cor(food$EatingOut, fitted(het_food))^2
 ```
+From these plots we can see that the assumptions of a heteroscedasctic linear model are met. The avPlots show that the relationship between Income and EatingOut is linear, and the residuals do not show any clear patterns. The histogram of standardized residuals closely follows a normal distribution, which is supported by the KS test p-value of 0.81, indicating no significant deviation from normality. The plot of fitted values versus standardized residuals shows no discernible pattern, and the Breusch‑Pagan test for heteroskedasticity yields a p-value of 0.63, confirming that our model appropriately accounts for the changing variance with income. Finally, the R² value of 0.626 indicates that our model explains a meaningful portion of the variability in Eating Out expenditures while properly addressing the heteroskedastic nature of the data.
+
+#### Validating our Model
+```{r}
+#| echo: false
+
+## --- Setup & Data ---
+set.seed(121)
+
+# Load data
+# Expects:
+#   Income    = annual household income in thousands
+#   EatingOut = weekly $ spent eating out
+food <- read.table("FoodExpenses.txt", header = TRUE)
+n <- nrow(food)
+
+## --- Fit Models ---
+fit_ols <- lm(EatingOut ~ Income, data = food)
+
+fit_g <- gamlss(
+  EatingOut ~ Income,
+  sigma.formula = ~ Income,   # heteroskedasticity: sigma depends on Income
+  data = food,
+  trace = FALSE
+)
+
+## --- Information Criteria ---
+aic_ols <- AIC(fit_ols)
+bic_ols <- BIC(fit_ols)
+
+aic_g <- AIC(fit_g)
+bic_g <- GAIC(fit_g, k = log(n))  # BIC penalty uses log(n)
+
+ic_tbl <- data.frame(
+  model = c("OLS", "GAMLSS_het"),
+  AIC   = c(aic_ols, aic_g),
+  BIC   = c(bic_ols, bic_g)
+)
+print(ic_tbl)
+
+## --- Coverage Intervals (80%, 90%, 95%) ---
+# Fitted means
+mu_ols <- predict(fit_ols)
+mu_g   <- predict(fit_g, what = "mu", type = "response")
+
+# Standard deviations
+sd_ols <- rep(summary(fit_ols)$sigma, n)  # constant sigma for OLS
+sd_g   <- predict(fit_g, what = "sigma", type = "response")  # sigma(Income) for GAMLSS
+
+# Coverage helper
+coverage <- function(y, mu, sd, level) {
+  z <- qnorm((1 + level) / 2)
+  lower <- mu - z * sd
+  upper <- mu + z * sd
+  mean(y >= lower & y <= upper)
+}
+
+levels <- c(0.80, 0.90, 0.95)
+
+cov_ols <- sapply(levels, function(L) coverage(food$EatingOut, mu_ols, sd_ols, L))
+cov_g   <- sapply(levels, function(L) coverage(food$EatingOut, mu_g,   sd_g,   L))
+
+coverage_tbl <- data.frame(
+  Level = levels,
+  OLS_Coverage = as.numeric(cov_ols),
+  GAMLSS_Coverage = as.numeric(cov_g)
+)
+print(coverage_tbl)
+
+## --- Optional: Quick Plot of GAMLSS Mean and 95% Interval ---
+# (Uncomment to visualize; assumes Income is reasonably ordered or you sort for lines)
+ ord <- order(food$Income)
+ plot(food$Income, food$EatingOut,
+      pch = 16, col = "gray50",
+      xlab = "Income", ylab = "Eating Out ($/week)",
+      main = "GAMLSS: Mean and 95% Interval")
+ lines(food$Income[ord], mu_g[ord], col = "blue", lwd = 2)
+ lines(food$Income[ord], (mu_g + 1.96*sd_g)[ord], col = "blue", lty = 2)
+ lines(food$Income[ord], (mu_g - 1.96*sd_g)[ord], col = "blue", lty = 2)
+```
+
+The heteroskedastic linear model is a trustworthy model for this analysis because it provides both a substantially better statistical fit and more accurate uncertainty quantification than the standard OLS model. In terms of model fit, the heteroskedastic model achieves a much lower AIC (3515.09 vs. 3647.48) and BIC (3532.13 vs. 3660.26), demonstrating that it explains the data more effectively even after penalizing for model complexity. The coverage interval results also show that the heteroskedastic model produces well‑calibrated predictive intervals across all nominal levels. For example, at the 95% level, the heteroskedastic model achieves a coverage of 0.9446, almost exactly matching the intended 95% rate and slightly outperforming the OLS model (0.9426). At the 90% level, both models perform similarly, and at the 80% level, OLS slightly over‑covers (0.8413), while the heteroskedastic model stays closer to the target width (0.8126), reflecting more realistic uncertainty estimates. This improvement occurs because the heteroskedastic model allows the variability in EatingOut to change with Income rather than incorrectly assuming constant variance as OLS does. Taken together, the substantially better AIC/BIC values and the more accurate and better‑calibrated interval coverage provide strong evidence that the heteroskedastic linear model is reliable and appropriate for supporting the conclusions drawn in the previous section.
