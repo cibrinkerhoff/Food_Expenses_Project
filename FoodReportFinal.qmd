@@ -322,6 +322,9 @@ het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food
 
 
 
+
+
+
 # --- GAMLSS model ---
 # Mean:   mu = beta0 + beta1 * Income
 # Sigma:  log(sigma) = theta0 + theta1 * Income  (default link for sigma is log)
@@ -361,6 +364,9 @@ if (p_val < 0.05) {
   cat("Conclusion: Not enough evidence that the increase exceeds $0.50.\n")
 }
 
+
+
+
 inflation <- 0.035
 yrs <- 5
 compound <- (1+inflation)^yrs
@@ -397,6 +403,10 @@ sigma_5 <- exp(eta_sigma)
 # print(quantile(sigma_5, c(.025,.5,.975)))
 
 
+
+
+
+
 # set 2x2 layout, keep margins modest
 op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
 
@@ -425,6 +435,9 @@ hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
 
 # restore original graphics settings
 par(op)
+
+
+
 
 
 car::avPlots(lm(EatingOut ~ Income, data = food))
@@ -472,6 +485,10 @@ resids_fitted <- ggplot(data = lm_df, aes(x = fitted, y = resids))+
 r_2 <- cor(food$EatingOut, fitted(het_food))^2
 
 resids_hist + resids_fitted
+
+
+
+
 
 
 ## --- Setup & Data ---
