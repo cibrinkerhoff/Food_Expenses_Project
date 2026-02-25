@@ -1,0 +1,203 @@
+---
+title: "Food Report"
+author: "Corbin B, Matthew W"
+format: pdf
+editor: visual
+---
+
+1 + 1
+
+```{r}
+#| echo: false
+#| warning: false
+library(tidyverse)
+library(gamlss)
+
+food <- vroom::vroom("FoodExpenses.txt")
+
+het_food <- gamlss(formula = EatingOut ~ Income, sigma.formula = ~., data = food)
+```
+
+## Introduction
+
+The National Restaurant Association hired me to investigate how household income influences consumer spending on food away from home, a key component in understanding future restaurant demand. Using data from the Food Demand Survey (FooDS), which includes annual household income and weekly expenditures on eating out, this project examines whether restaurant food behaves as a “normal good” that is, whether spending increases as income rises. Beyond assessing this basic relationship, the analysis also considers how variability in spending among higher‑income households and shifting preferences for convenience or food quality may shape broader market trends. The goal is to provide financial advisers with clear, regression‑based insights that can inform projections of restaurant demand and guide strategic planning for business growth in an evolving economic landscape.
+
+## Main Conclusions
+
+We found that there is a linear relationship between Income and Food Expenditures. This is great for being able to build a model for this data. We also found that the data is heteroscedastic, in this case as income increases, the variance of food expenditures also increases.
+
+### Is the market healthy?
+
+```{r}
+#| echo: false
+
+
+# --- GAMLSS model ---
+# Mean:   mu = beta0 + beta1 * Income
+# Sigma:  log(sigma) = theta0 + theta1 * Income  (default link for sigma is log)
+fit <- gamlss(
+  formula       = EatingOut ~ Income,
+  sigma.formula = ~ Income,    # allow heteroskedasticity with income
+  data          = food
+)
+
+# --- Extract slope (beta1) and its SE from the mean equation ---
+b1    <- unname(coef(fit, what = "mu")["Income"])
+V_mu  <- vcov(fit, what = "mu")
+se_b1 <- sqrt(diag(V_mu))["Income"]
+
+# --- One-sided Wald test: H0: beta1 = 0.50  vs  H1: beta1 > 0.50 ---
+b_star <- 0.50
+z_val  <- (b1 - b_star) / se_b1
+p_val  <- pnorm(z_val, lower.tail = FALSE)  # upper-tail p-value for beta1 > 0.50
+
+
+# --- 95% CI for beta1 (two-sided) ---
+z_975 <- qnorm(0.975)
+ci95  <- c(b1 - z_975 * se_b1, b1 + z_975 * se_b1)
+
+# --- Report ---
+cat("\n--- Healthy Economy Test (GAMLSS) ---\n")
+cat(sprintf("Estimated slope (beta1): %.3f $/week per $1,000 income\n", b1))
+cat(sprintf("Standard error:          %.3f\n", se_b1))
+cat(sprintf("95%% CI for beta1:        [%.3f, %.3f]\n", ci95[1], ci95[2]))
+cat("One-sided test: H0: beta1 = 0.50  vs  H1: beta1 > 0.50\n")
+cat(sprintf("z = %.3f, p = %.4f\n", z_val, p_val))
+
+if (p_val < 0.05) {
+  cat("Conclusion: Evidence that the increase EXCEEDS $0.50 → Healthy economy.\n")
+} else {
+  cat("Conclusion: Not enough evidence that the increase exceeds $0.50.\n")
+}
+```
+
+Based on the advisers’ benchmark, the data do not provide evidence that this is a “healthy” restaurant economy. The heteroskedastic linear model estimates that weekly eating‑out spending increases by \$0.443 for every additional \$1,000 of annual income which is below the advisers’ threshold of \$0.50. The estimate is also quite precise, with a standard error of 0.014 and a 95% confidence interval of \[0.416, 0.470\], which lies entirely below the hypothesized healthy level. Furthermore, the one‑sided hypothesis test comparing the observed slope to the target of \$0.50 yields a z‑value of –4.077 and a p‑value of 1.000, indicating no statistical support that the true increase meets or exceeds the \$0.50 benchmark. Taken together, the point estimate, confidence interval, and hypothesis test all suggest that, based on this dataset, the economy does not satisfy the advisers’ definition of a healthy level of growth in restaurant spending.
+
+### 5 year predictions
+
+```{r}
+#| echo: false
+
+inflation <- 0.035
+yrs <- 5
+compound <- (1+inflation)^yrs
+
+# assumes `compound` is a numeric scalar
+income_5 <- food$Income * compound
+
+# Make newdata with the predictor named exactly as in your formula (e.g., Income)
+newdata <- data.frame(Income = income_5)
+
+# Predict
+eating_5 <- predict(het_food, newdata = newdata)
+
+print("Means")
+print("Original Vals")
+print(quantile(food$EatingOut, c(.025,.5,.975)))
+print("After 5 years")
+print(quantile(eating_5, c(.025,.5,.975)))
+
+
+b_sigma <- coef(het_food, what = "sigma")  # c("(Intercept)"=..., "Budget"=...)
+
+sigma_og <- exp(b_sigma["(Intercept)"] + b_sigma["Income"] * food$Income)
+
+# sigma = exp(gamma0 + gamma1 * Budget)   (log link)
+eta_sigma <- b_sigma["(Intercept)"] + b_sigma["Income"] * income_5
+sigma_5 <- exp(eta_sigma)
+
+
+print("Variance")
+print("Original Vals")
+print(quantile(sigma_og, c(.025,.5,.975)))
+print("After 5 years")
+print(quantile(sigma_5, c(.025,.5,.975)))
+
+
+```
+
+As incomes are expected to rise by roughly 3–4% annually over the next five years, our model predicts a corresponding increase in both the average level of Eating Out expenditures and the uncertainty surrounding those expenditures. These predictions are considering what Expeditures will look like at the 5 year mark. Specifically, we estimate that the average amount spent eating out will increase from approximately 46.53 to 50.76. In addition, the model indicates that the range within which 95% of Eating Out expenditures are expected to fall will shift to between 34.98 and 82.33 at the new income levels. Variability in spending also increases as incomes rise: the average variance in Eating Out expenditures is projected to grow from 6.38 to 7.43, and the 95% range of variances across incomes is expected to widen to between 4.58 and 19.56. Together, these results suggest not only higher spending on average but also a broader spread in eating‑out behavior as household incomes gradually increase
+
+## Modeling Details
+
+#### Flaws in the standard linear regression approach
+
+
+```{r}
+#| echo: false
+
+#LINE ASSUMPTIONS
+plot(food$Income, food$EatingOut, xlab = 'Income', ylab = 'Food Expenses', main = 'Food Expenses vs Income')
+#line assumptions met
+
+#create resids
+model <- lm(EatingOut ~ Income, data = food)
+resids <- resid(model)
+
+#plot resids
+plot(food$Income, resids, xlab = 'Income', ylab = 'Residuals', main = 'Residuals vs Income')
+#problems with heteroskedasticity
+
+#check normality of resids
+qqnorm(resids)
+qqline(resids)
+hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
+#normality is met
+```
+
+A standard linear regression model is not adequate for this analysis, and this is precisely why my expertise was needed. When we examined the residuals from a traditional least‑squares regression of EatingOut on Income, the plot clearly showed a strong pattern of heteroskedasticity, the spread of residuals increases substantially as income rises. In other words, higher‑income households exhibit far more variability in their restaurant spending, violating the constant‑variance assumption required for ordinary regression to produce reliable estimates, standard errors, and hypothesis tests. Ignoring this issue would lead to biased inference and misleading conclusions about how strongly income affects restaurant spending. To overcome this, we fitted a heteroskedastic linear model using GAMLSS, which explicitly models both the mean and the variance as functions of income. This approach captures the true structure of the data and produces trustworthy estimates for policy and forecasting. The need for a model that handles non‑constant variance demonstrates why a more advanced analysis was required, and it is why bringing in a consultant with the appropriate statistical toolkit was essential.
+
+#### Our advanced model
+
+Our advanced model builds on the familiar framework of simple linear regression but improves it by allowing the variability of Eating Out behavior to change with income. In a traditional regression model, we assume that the spread of the data around the prediction—known as the variance—is constant for all income levels. However, in our data we observed that higher‑income individuals show much more variability in how much they spend eating out.
+
+To account for this, our model keeps the same form for predicting the average Eating Out level at a given income, expressed as $\text{Average Eating Out}_i = 19.19 + 0.443*\text{Income}_i$
+
+but it enhances the model by allowing the variance of Eating Out spending to change with income rather than remain fixed. Specifically, we model the variance as $\log(\text{Variance}) = 1.038 + 0.014*\text{Income}_i$ which means the variability is mathematically tied to income and can increase or decrease depending on the estimated relationship. By explicitly modeling how uncertainty grows with income, this approach produces more accurate confidence intervals and more reliable hypothesis tests, ultimately leading to conclusions that better reflect the true behavior in the population.
+
+#### Validating our model
+
+```{r}
+
+car::avPlots(lm(EatingOut ~ Income, data = food))
+
+```
+
+```{r}
+
+std_resids <- residuals(het_food, what = "z-scores")
+```
+
+```{r}
+hist(std_resids, freq = F, xlim = c(-4,4))
+par(new = T)
+curve(dnorm(x), xlim = c(-4,4))
+
+ks.test(std_resids,"pnorm", mean = 0, sd = 1)
+```
+
+```{r}
+
+lm_df <- tibble(
+  fitted = fitted(het_food),
+  resids = std_resids
+)
+
+bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
+bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
+
+ggplot(data = lm_df, aes(x = fitted, y = resids))+
+  geom_point(alpha = 1, size = 1)+
+  ylim(-3,3)+
+  geom_hline(yintercept = 0, color = 'red')+
+  annotate(
+      "text",
+      x = 50, y = 3,
+      label = bp_str,
+      size = 4,
+      color = "blue"
+    )
+
+
+r_2 <- cor(food$EatingOut, fitted(het_food))^2
+```
