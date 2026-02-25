@@ -25,6 +25,7 @@ car::avPlots(lm(EatingOut ~ Income, data = food))
 ```{r}
 
 std_resids <- residuals(het_food, what = "z-scores")
+std_resids
 ```
 
 ```{r}
@@ -176,7 +177,7 @@ As incomes are expected to rise by roughly 3–4% annually over the next five ye
 ## Modeling Details
 
 ```{r}
-#LINE ASSUMPTIONS
+#LINE ASSUMPTIONS for 
 plot(food$Income, food$EatingOut, xlab = 'Income', ylab = 'Food Expenses', main = 'Food Expenses vs Income')
 #line assumptions met
 
@@ -197,12 +198,71 @@ hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
 
 A standard linear regression model is not adequate for this analysis, and this is precisely why my expertise was needed. When we examined the residuals from a traditional least‑squares regression of EatingOut on Income, the plot clearly showed a strong pattern of heteroskedasticity, the spread of residuals increases substantially as income rises. In other words, higher‑income households exhibit far more variability in their restaurant spending, violating the constant‑variance assumption required for ordinary regression to produce reliable estimates, standard errors, and hypothesis tests. Ignoring this issue would lead to biased inference and misleading conclusions about how strongly income affects restaurant spending. To overcome this, we fitted a heteroskedastic linear model using GAMLSS, which explicitly models both the mean and the variance as functions of income. This approach captures the true structure of the data and produces trustworthy estimates for policy and forecasting. The need for a model that handles non‑constant variance demonstrates why a more advanced analysis was required, and it is why bringing in a consultant with the appropriate statistical toolkit was essential.
 
-Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers Food Expenditures Consulting Problem Background n = 523 don’t know linear algebra so try to avoid that if possible.
+#### Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers donʼt know linear algebra so try to avoid that if possible.
 
-Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
+Our advanced model builds on the familiar framework of simple linear regression but improves it by allowing the variability of Eating Out behavior to change with income. In a traditional regression model, we assume that the spread of the data around the prediction—known as the variance—is constant for all income levels. However, in our data we observed that higher‑income individuals show much more variability in how much they spend eating out.
+
+To account for this, our model keeps the same form for predicting the average Eating Out level at a given income, expressed as $\text{Average Eating Out}_i = 19.19 + 0.443*\text{Income}_i$
+
+but it enhances the model by allowing the variance of Eating Out spending to change with income rather than remain fixed. Specifically, we model the variance as $\log(\text{Variance}) = 1.038 + 0.014*\text{Income}_i$ which means the variability is mathematically tied to income and can increase or decrease depending on the estimated relationship. By explicitly modeling how uncertainty grows with income, this approach produces more accurate confidence intervals and more reliable hypothesis tests, ultimately leading to conclusions that better reflect the true behavior in the population.
+
+#### Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
 
 ```{r}
 
+car::avPlots(lm(EatingOut ~ Income, data = food))
+
+```
+
+```{r}
+
+std_resids <- residuals(het_food, what = "z-scores")
+```
+
+```{r}
+hist(std_resids, freq = F, xlim = c(-4,4))
+par(new = T)
+curve(dnorm(x), xlim = c(-4,4))
+
+ks.test(std_resids,"pnorm", mean = 0, sd = 1)
+```
+
+```{r}
+
+lm_df <- tibble(
+  fitted = fitted(het_food),
+  resids = std_resids
+)
+
+bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
+bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
+
+ggplot(data = lm_df, aes(x = fitted, y = resids))+
+  geom_point(alpha = 1, size = 1)+
+  ylim(-3,3)+
+  geom_hline(yintercept = 0, color = 'red')+
+  annotate(
+      "text",
+      x = 50, y = 3,
+      label = bp_str,
+      size = 4,
+      color = "blue"
+    )
+
+```
+
+```{r}
+r_2 <- cor(food$EatingOut, fitted(het_food))^2
+
+r_2
+```
+
+Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
+
+add coverage
+
+```{r}
+n<-nrow(food)
 fit_ols <- lm(EatingOut ~ Income, data = food)
 fit_g   <- gamlss(EatingOut ~ Income, sigma.formula = ~ Income, data = food, trace = FALSE)
 
@@ -279,60 +339,3 @@ print(mean_nll)
 ```
 
 The heteroskedastic linear model is clearly the more trustworthy choice for this analysis because it provides a substantially better fit to the data than a standard OLS regression. Both AIC and BIC, which evaluate model quality by balancing goodness‑of‑fit against model complexity, strongly favor the heteroskedastic linear model: its AIC (3515.09) and BIC (3532.13) are dramatically lower than the OLS model’s AIC (3647.48) and BIC (3660.26). Differences of this magnitude indicate overwhelming evidence that the heteroskedastic specification captures the underlying data structure far more effectively. This conclusion is reinforced by the cross‑validated negative log‑likelihood, which measures how well each model predicts the full distribution of eating‑out spending. The heteroskedastic linear model achieves a lower NLL (175.77) compared to OLS (182.48), meaning it produces more accurate probabilistic predictions and better accounts for the fact that variability in spending increases with income. Beyond improving predictive likelihood, the heteroskedastic model also yields more accurate confidence and prediction intervals than OLS, because it correctly models the changing variance rather than assuming constant noise. While the two models may produce similar mean predictions or RMSE, only the heteroskedastic specification delivers intervals that properly widen with income, making it a more reliable foundation for inference and decision‑making.
-
-#### Describe this new “advanced” model you are using in mathematical detail and how you used it to arrive at the conclusions you came to in the following section. In doing so, these advisers donʼt know linear algebra so try to avoid that if possible.
-
-Our advanced model builds on the familiar framework of simple linear regression but improves it by allowing the variability of Eating Out behavior to change with income. In a traditional regression model, we assume that the spread of the data around the prediction—known as the variance—is constant for all income levels. However, in our data we observed that higher‑income individuals show much more variability in how much they spend eating out.
-
-To account for this, our model keeps the same form for predicting the average Eating Out level at a given income, expressed as $\text{Average Eating Out}_i = 19.19 + 0.443*\text{Income}_i$
-
-but it enhances the model by allowing the variance of Eating Out spending to change with income rather than remain fixed. Specifically, we model the variance as $\log(\text{Variance}) = 1.038 + 0.014*\text{Income}_i$ which means the variability is mathematically tied to income and can increase or decrease depending on the estimated relationship. By explicitly modeling how uncertainty grows with income, this approach produces more accurate confidence intervals and more reliable hypothesis tests, ultimately leading to conclusions that better reflect the true behavior in the population.
-
-#### Justify (i.e validate) that this model is a trustworthy model for the answers you wrote in the previous section.
-
-```{r}
-
-car::avPlots(lm(EatingOut ~ Income, data = food))
-
-```
-
-```{r}
-
-std_resids <- residuals(het_food, what = "z-scores")
-```
-
-```{r}
-hist(std_resids, freq = F, xlim = c(-4,4))
-par(new = T)
-curve(dnorm(x), xlim = c(-4,4))
-
-ks.test(std_resids,"pnorm", mean = 0, sd = 1)
-```
-
-```{r}
-
-lm_df <- tibble(
-  fitted = fitted(het_food),
-  resids = std_resids
-)
-
-bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
-bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
-
-ggplot(data = lm_df, aes(x = fitted, y = resids))+
-  geom_point(alpha = 1, size = 1)+
-  ylim(-3,3)+
-  geom_hline(yintercept = 0, color = 'red')+
-  annotate(
-      "text",
-      x = 50, y = 3,
-      label = bp_str,
-      size = 4,
-      color = "blue"
-    )
-
-```
-
-```{r}
-r_2 <- cor(food$EatingOut, fitted(het_food))^2
-```
