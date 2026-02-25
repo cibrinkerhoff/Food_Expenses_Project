@@ -124,10 +124,16 @@ As incomes are expected to rise by roughly 3–4% annually over the next five ye
 
 
 ```{r}
+
 #| echo: false
 
+# set 2x2 layout, keep margins modest
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 3, 1))
+
 #LINE ASSUMPTIONS
-plot(food$Income, food$EatingOut, xlab = 'Income', ylab = 'Food Expenses', main = 'Food Expenses vs Income')
+plot(food$Income, food$EatingOut,
+     xlab = 'Income', ylab = 'Food Expenses',
+     main = 'Food Expenses vs Income')
 #line assumptions met
 
 #create resids
@@ -135,14 +141,21 @@ model <- lm(EatingOut ~ Income, data = food)
 resids <- resid(model)
 
 #plot resids
-plot(food$Income, resids, xlab = 'Income', ylab = 'Residuals', main = 'Residuals vs Income')
+plot(food$Income, resids,
+     xlab = 'Income', ylab = 'Residuals',
+     main = 'Residuals vs Income')
 #problems with heteroskedasticity
 
 #check normality of resids
 qqnorm(resids)
 qqline(resids)
+
 hist(resids, xlab = 'Residuals', main = 'Histogram of Residuals')
 #normality is met
+
+# restore original graphics settings
+par(op)
+
 ```
 
 A standard linear regression model is not adequate for this analysis, and this is precisely why my expertise was needed. When we examined the residuals from a traditional least‑squares regression of EatingOut on Income, the plot clearly showed a strong pattern of heteroskedasticity, the spread of residuals increases substantially as income rises. In other words, higher‑income households exhibit far more variability in their restaurant spending, violating the constant‑variance assumption required for ordinary regression to produce reliable estimates, standard errors, and hypothesis tests. Ignoring this issue would lead to biased inference and misleading conclusions about how strongly income affects restaurant spending. To overcome this, we fitted a heteroskedastic linear model using GAMLSS, which explicitly models both the mean and the variance as functions of income. This approach captures the true structure of the data and produces trustworthy estimates for policy and forecasting. The need for a model that handles non‑constant variance demonstrates why a more advanced analysis was required, and it is why bringing in a consultant with the appropriate statistical toolkit was essential.
