@@ -11,6 +11,7 @@ editor: visual
 #| warning: false
 library(tidyverse)
 library(gamlss)
+library(patchwork)
 
 food <- vroom::vroom("FoodExpenses.txt")
 
@@ -91,11 +92,11 @@ newdata <- data.frame(Income = income_5)
 # Predict
 eating_5 <- predict(het_food, newdata = newdata)
 
-print("Means")
-print("Original Vals")
-print(quantile(food$EatingOut, c(.025,.5,.975)))
-print("After 5 years")
-print(quantile(eating_5, c(.025,.5,.975)))
+# print("Means")
+# print("Original Vals")
+# print(quantile(food$EatingOut, c(.025,.5,.975)))
+# print("After 5 years")
+# print(quantile(eating_5, c(.025,.5,.975)))
 
 
 b_sigma <- coef(het_food, what = "sigma")  # c("(Intercept)"=..., "Budget"=...)
@@ -107,11 +108,11 @@ eta_sigma <- b_sigma["(Intercept)"] + b_sigma["Income"] * income_5
 sigma_5 <- exp(eta_sigma)
 
 
-print("Variance")
-print("Original Vals")
-print(quantile(sigma_og, c(.025,.5,.975)))
-print("After 5 years")
-print(quantile(sigma_5, c(.025,.5,.975)))
+# print("Variance")
+# print("Original Vals")
+# print(quantile(sigma_og, c(.025,.5,.975)))
+# print("After 5 years")
+# print(quantile(sigma_5, c(.025,.5,.975)))
 
 
 ```
@@ -161,16 +162,34 @@ but it enhances the model by allowing the variance of Eating Out spending to cha
 
 ```{r}
 #| echo: false
+#| warning: false
 
-car::avPlots(lm(EatingOut ~ Income, data = food))
+avplt <- car::avPlots(lm(EatingOut ~ Income, data = food))
 
 std_resids <- residuals(het_food, what = "z-scores")
+# 
+# hist(std_resids, freq = F, xlim = c(-4,4))
+# par(new = T)
+# curve(dnorm(x), xlim = c(-4,4))
 
-hist(std_resids, freq = F, xlim = c(-4,4))
-par(new = T)
-curve(dnorm(x), xlim = c(-4,4))
 
-ks.test(std_resids,"pnorm", mean = 0, sd = 1)
+# assuming std_resids already exists as your z-score residuals
+df <- data.frame(std_resids = std_resids)
+
+resids_hist <- ggplot(df, aes(x = std_resids)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 30, fill = "grey80", color = "grey30") +
+  stat_function(fun = dnorm, color = "blue", linewidth = 1) +
+  coord_cartesian(xlim = c(-4, 4)) +
+  labs(
+    title = "Histogram of Stand. Residual and a Residuals v Fitted Plot",
+    x = "Standardized residuals (z-scores)",
+    y = "Density"
+  ) +
+  theme_minimal()
+
+
+ks_results <- ks.test(std_resids,"pnorm", mean = 0, sd = 1)
 
 
 lm_df <- tibble(
@@ -181,20 +200,17 @@ lm_df <- tibble(
 bp_pval <- lmtest::bptest(std_resids~Income, data = food)$p.value
 bp_str <- paste0('BP Test p-value: ',round(bp_pval,3))
 
-ggplot(data = lm_df, aes(x = fitted, y = resids))+
+resids_fitted <- ggplot(data = lm_df, aes(x = fitted, y = resids))+
   geom_point(alpha = 1, size = 1)+
   ylim(-3,3)+
-  geom_hline(yintercept = 0, color = 'red')+
-  annotate(
-      "text",
-      x = 50, y = 3,
-      label = bp_str,
-      size = 4,
-      color = "blue"
-    )
+  geom_hline(yintercept = 0, color = 'red')
 
 
 r_2 <- cor(food$EatingOut, fitted(het_food))^2
+
+avplt
+resids_hist + resids_fitted
+  
 ```
 From these plots we can see that the assumptions of a heteroscedasctic linear model are met. The avPlots show that the relationship between Income and EatingOut is linear, and the residuals do not show any clear patterns. The histogram of standardized residuals closely follows a normal distribution, which is supported by the KS test p-value of 0.81, indicating no significant deviation from normality. The plot of fitted values versus standardized residuals shows no discernible pattern, and the Breusch‑Pagan test for heteroskedasticity yields a p-value of 0.63, confirming that our model appropriately accounts for the changing variance with income. Finally, the R² value of 0.626 indicates that our model explains a meaningful portion of the variability in Eating Out expenditures while properly addressing the heteroskedastic nature of the data.
 
