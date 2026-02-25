@@ -291,3 +291,10 @@ print(coverage_tbl)
 ```
 
 The heteroskedastic linear model is a trustworthy model for this analysis because it provides both a substantially better statistical fit and more accurate uncertainty quantification than the standard OLS model. In terms of model fit, the heteroskedastic model achieves a much lower AIC (3515.09 vs. 3647.48) and BIC (3532.13 vs. 3660.26), demonstrating that it explains the data more effectively even after penalizing for model complexity. The coverage interval results also show that the heteroskedastic model produces well‑calibrated predictive intervals across all nominal levels. For example, at the 95% level, the heteroskedastic model achieves a coverage of 0.9446, almost exactly matching the intended 95% rate and slightly outperforming the OLS model (0.9426). At the 90% level, both models perform similarly, and at the 80% level, OLS slightly over‑covers (0.8413), while the heteroskedastic model stays closer to the target width (0.8126), reflecting more realistic uncertainty estimates. This improvement occurs because the heteroskedastic model allows the variability in EatingOut to change with Income rather than incorrectly assuming constant variance as OLS does. Taken together, the substantially better AIC/BIC values and the more accurate and better‑calibrated interval coverage provide strong evidence that the heteroskedastic linear model is reliable and appropriate for supporting the conclusions drawn in the previous section.
+
+
+## Code Appendix
+```{r}
+#| eval: FALSE
+
+```
